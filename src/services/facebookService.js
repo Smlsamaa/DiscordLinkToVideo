@@ -13,6 +13,16 @@ const ffmpegPath = isWindows ? "C:\\tools\\ffmpeg.exe" : "ffmpeg";
 
 // Helper function to find yt-dlp on Linux
 async function findYtDlpPath() {
+  // Prefer explicit env override (set by runtime installer)
+  if (process.env.YTDLP_PATH) {
+    try {
+      await execAsync(`${process.env.YTDLP_PATH} --version`, { timeout: 5000 });
+      console.log(`[FB Service] Using YTDLP_PATH: ${process.env.YTDLP_PATH}`);
+      return process.env.YTDLP_PATH;
+    } catch (_) {
+      console.warn(`[FB Service] YTDLP_PATH is set but not executable: ${process.env.YTDLP_PATH}`);
+    }
+  }
   if (isWindows) {
     return "C:\\tools\\yt-dlp.exe";
   }
@@ -22,6 +32,7 @@ async function findYtDlpPath() {
     "yt-dlp",  // Direct command (if in PATH)
     "/usr/local/bin/yt-dlp",  // System-wide installation
     "/usr/bin/yt-dlp",  // Alternative system path
+    "/tmp/yt-dlp", // Runtime-installed fallback
     "python3 -m yt_dlp",  // Python module
     "python3 -m yt-dlp"  // Alternative module name
   ];

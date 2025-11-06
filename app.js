@@ -11,6 +11,7 @@ const port = process.env.PORT || 3000;
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+const fs = require('fs');
 
 // This is the endpoint UptimeRobot will ping.
 app.get('/', (req, res) => {
@@ -33,6 +34,13 @@ app.get('/debug', async (req, res) => {
       checks.yt_dlp_version = stdout.trim();
     } catch (e) {
       checks.yt_dlp_version = `error: ${e.message}`;
+    }
+
+    try {
+      const { stdout } = await execAsync('ls -l /tmp/yt-dlp || echo "missing"');
+      checks.tmp_ytdlp = stdout.trim();
+    } catch (e) {
+      checks.tmp_ytdlp = `error: ${e.message}`;
     }
 
     try {
@@ -59,9 +67,30 @@ app.get('/debug', async (req, res) => {
 app.listen(port, () => {
   console.log(`Keep-alive server is running on port ${port}`);
   // Startup self-checks
-  execAsync('/usr/local/bin/yt-dlp --version || yt-dlp --version')
-    .then(({ stdout }) => console.log(`[Startup] yt-dlp version: ${stdout.trim()}`))
-    .catch(err => console.warn(`[Startup] yt-dlp check failed: ${err.message}`));
+  (async () => {
+    // Ensure yt-dlp is installed; if not, attempt runtime install
+    try {
+      const { stdout } = await execAsync('/usr/local/bin/yt-dlp --version || yt-dlp --version');
+      console.log(`[Startup] yt-dlp version: ${stdout.trim()}`);
+    } catch (e) {
+      console.warn(`[Startup] yt-dlp not found, attempting runtime install: ${e.message}`);
+      try {
+        await execAsync('curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && chmod a+rx /usr/local/bin/yt-dlp');
+        const { stdout } = await execAsync('/usr/local/bin/yt-dlp --version');
+        console.log(`[Startup] yt-dlp installed at /usr/local/bin, version: ${stdout.trim()}`);
+      } catch (e2) {
+        console.warn(`[Startup] Install to /usr/local/bin failed, trying /tmp: ${e2.message}`);
+        try {
+          await execAsync('curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /tmp/yt-dlp && chmod a+rx /tmp/yt-dlp');
+          process.env.YTDLP_PATH = '/tmp/yt-dlp';
+          const { stdout } = await execAsync('/tmp/yt-dlp --version');
+          console.log(`[Startup] yt-dlp installed at /tmp/yt-dlp, version: ${stdout.trim()}`);
+        } catch (e3) {
+          console.error(`[Startup] Runtime install failed: ${e3.message}`);
+        }
+      }
+    }
+  })();
   execAsync('ffmpeg -version | head -n 1')
     .then(({ stdout }) => console.log(`[Startup] ffmpeg: ${stdout.trim()}`))
     .catch(err => console.warn(`[Startup] ffmpeg check failed: ${err.message}`));
