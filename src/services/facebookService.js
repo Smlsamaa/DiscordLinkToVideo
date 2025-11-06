@@ -9,14 +9,51 @@ const execAsync = promisify(exec);
 
 // Detect OS and set appropriate paths
 const isWindows = os.platform() === "win32";
-const ytDlpPath = isWindows ? "C:\\tools\\yt-dlp.exe" : "python3 -m yt_dlp";
 const ffmpegPath = isWindows ? "C:\\tools\\ffmpeg.exe" : "ffmpeg";
+
+// Helper function to find yt-dlp on Linux
+async function findYtDlpPath() {
+  if (isWindows) {
+    return "C:\\tools\\yt-dlp.exe";
+  }
+  
+  // Try multiple methods to find yt-dlp on Linux
+  const methods = [
+    "yt-dlp",  // Direct command (if in PATH)
+    "/usr/local/bin/yt-dlp",  // System-wide installation
+    "/usr/bin/yt-dlp",  // Alternative system path
+    "python3 -m yt_dlp",  // Python module
+    "python3 -m yt-dlp"  // Alternative module name
+  ];
+  
+  // Try to find which one works
+  for (const method of methods) {
+    try {
+      // Test if the command exists/works with a simple version check
+      const testCmd = method.includes("python3") 
+        ? `${method} --version`
+        : `${method} --version`;
+      
+      await execAsync(testCmd, { timeout: 5000 });
+      console.log(`[FB Service] Found yt-dlp at: ${method}`);
+      return method;
+    } catch (err) {
+      // Continue to next method
+      continue;
+    }
+  }
+  
+  // If none found, return the first one (will try and fail gracefully)
+  console.log("[FB Service] Could not find yt-dlp, will try: yt-dlp");
+  return "yt-dlp";
+}
 
 // Method 1: Try yt-dlp first
 async function tryYtDlp(url) {
   try {
     console.log("[FB Service] Trying yt-dlp method...");
-    console.log(`[FB Service] Platform: ${os.platform()}, yt-dlp path: ${ytDlpPath}`);
+    const ytDlpPath = await findYtDlpPath();
+    console.log(`[FB Service] Platform: ${os.platform()}, using: ${ytDlpPath}`);
     
     let stdout;
     
@@ -35,15 +72,39 @@ async function tryYtDlp(url) {
       });
       stdout = result.stdout;
     } else {
-      // On Linux, use python3 -m yt_dlp since pip3 installs it as a Python module
-      // This is more reliable than trying to find yt-dlp in PATH
-      const cmd = `${ytDlpPath} --get-url --format "best[ext=mp4]/best" --no-check-certificates "${url}"`;
+      // On Linux, try the found method
+      const args = [
+        "--get-url",
+        "--format", "best[ext=mp4]/best",
+        "--no-check-certificates",
+        url
+      ];
       
-      const result = await execAsync(cmd, {
-        timeout: 20000,
-        env: { ...process.env, PATH: process.env.PATH } // Ensure PATH is inherited
-      });
-      stdout = result.stdout;
+      if (ytDlpPath.includes("python3")) {
+        // If it's a python module, use exec with shell
+        const cmd = `${ytDlpPath} ${args.join(" ")}`;
+        const result = await execAsync(cmd, {
+          timeout: 20000,
+          env: process.env
+        });
+        stdout = result.stdout;
+      } else {
+        // If it's a direct executable, use execFile
+        try {
+          const result = await execFileAsync(ytDlpPath, args, {
+            timeout: 20000
+          });
+          stdout = result.stdout;
+        } catch (err) {
+          // Fallback to exec if execFile fails
+          const cmd = `${ytDlpPath} ${args.join(" ")}`;
+          const result = await execAsync(cmd, {
+            timeout: 20000,
+            env: process.env
+          });
+          stdout = result.stdout;
+        }
+      }
     }
 
     const videoUrl = stdout.trim();
