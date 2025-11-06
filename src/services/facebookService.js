@@ -9,7 +9,7 @@ const execAsync = promisify(exec);
 
 // Detect OS and set appropriate paths
 const isWindows = os.platform() === "win32";
-const ytDlpPath = isWindows ? "C:\\tools\\yt-dlp.exe" : "yt-dlp";
+const ytDlpPath = isWindows ? "C:\\tools\\yt-dlp.exe" : "python3 -m yt_dlp";
 const ffmpegPath = isWindows ? "C:\\tools\\ffmpeg.exe" : "ffmpeg";
 
 // Method 1: Try yt-dlp first
@@ -35,11 +35,13 @@ async function tryYtDlp(url) {
       });
       stdout = result.stdout;
     } else {
-      // On Linux, use exec (which uses PATH) since yt-dlp is installed via pip3
+      // On Linux, use python3 -m yt_dlp since pip3 installs it as a Python module
+      // This is more reliable than trying to find yt-dlp in PATH
       const cmd = `${ytDlpPath} --get-url --format "best[ext=mp4]/best" --no-check-certificates "${url}"`;
       
       const result = await execAsync(cmd, {
-        timeout: 20000
+        timeout: 20000,
+        env: { ...process.env, PATH: process.env.PATH } // Ensure PATH is inherited
       });
       stdout = result.stdout;
     }
