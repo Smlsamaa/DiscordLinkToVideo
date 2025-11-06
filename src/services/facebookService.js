@@ -1,27 +1,48 @@
 // facebookService.js
-const { execFile } = require("child_process");
+const { execFile, exec } = require("child_process");
 const { promisify } = require("util");
 const axios = require("axios");
+const os = require("os");
 
 const execFileAsync = promisify(execFile);
+const execAsync = promisify(exec);
 
-const ytDlpPath = "C:\\tools\\yt-dlp.exe";
-const ffmpegPath = "C:\\tools\\ffmpeg.exe";
+// Detect OS and set appropriate paths
+const isWindows = os.platform() === "win32";
+const ytDlpPath = isWindows ? "C:\\tools\\yt-dlp.exe" : "yt-dlp";
+const ffmpegPath = isWindows ? "C:\\tools\\ffmpeg.exe" : "ffmpeg";
 
 // Method 1: Try yt-dlp first
 async function tryYtDlp(url) {
   try {
     console.log("[FB Service] Trying yt-dlp method...");
+    console.log(`[FB Service] Platform: ${os.platform()}, yt-dlp path: ${ytDlpPath}`);
     
-    const { stdout } = await execFileAsync(ytDlpPath, [
-      "--get-url",
-      "--format", "best[ext=mp4]/best",
-      "--ffmpeg-location", ffmpegPath,
-      "--no-check-certificates",
-      url
-    ], {
-      timeout: 20000
-    });
+    let stdout;
+    
+    if (isWindows) {
+      // On Windows, use execFile with explicit paths
+      const args = [
+        "--get-url",
+        "--format", "best[ext=mp4]/best",
+        "--ffmpeg-location", ffmpegPath,
+        "--no-check-certificates",
+        url
+      ];
+      
+      const result = await execFileAsync(ytDlpPath, args, {
+        timeout: 20000
+      });
+      stdout = result.stdout;
+    } else {
+      // On Linux, use exec (which uses PATH) since yt-dlp is installed via pip3
+      const cmd = `${ytDlpPath} --get-url --format "best[ext=mp4]/best" --no-check-certificates "${url}"`;
+      
+      const result = await execAsync(cmd, {
+        timeout: 20000
+      });
+      stdout = result.stdout;
+    }
 
     const videoUrl = stdout.trim();
     if (videoUrl && videoUrl.startsWith("http")) {
