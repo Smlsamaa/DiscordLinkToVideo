@@ -31,7 +31,7 @@ module.exports = async function handleTikTokLink(message) {
 
   } catch (err) {
     console.error("❌ TikTok Controller Error:", err.message);
-    await fetchingMsg.edit("Bot hỏng r");
+    await fetchingMsg.edit("Cậu Minh ốm rồi (cậu bận)");
     return true;
   }
 };
