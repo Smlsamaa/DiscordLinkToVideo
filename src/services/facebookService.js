@@ -68,9 +68,12 @@ async function tryYtDlp(url) {
       ];
       
       const result = await execFileAsync(ytDlpPath, args, {
-        timeout: 20000
+        timeout: 40000
       });
       stdout = result.stdout;
+      if (result.stderr) {
+        console.warn(`[FB Service] yt-dlp stderr (win): ${result.stderr.substring(0, 500)}`);
+      }
     } else {
       // On Linux, try the found method
       const args = [
@@ -84,25 +87,34 @@ async function tryYtDlp(url) {
         // If it's a python module, use exec with shell
         const cmd = `${ytDlpPath} ${args.join(" ")}`;
         const result = await execAsync(cmd, {
-          timeout: 20000,
+          timeout: 40000,
           env: process.env
         });
         stdout = result.stdout;
+        if (result.stderr) {
+          console.warn(`[FB Service] yt-dlp stderr (linux-py): ${result.stderr.substring(0, 500)}`);
+        }
       } else {
         // If it's a direct executable, use execFile
         try {
           const result = await execFileAsync(ytDlpPath, args, {
-            timeout: 20000
+            timeout: 40000
           });
           stdout = result.stdout;
+          if (result.stderr) {
+            console.warn(`[FB Service] yt-dlp stderr (linux-file): ${result.stderr.substring(0, 500)}`);
+          }
         } catch (err) {
           // Fallback to exec if execFile fails
           const cmd = `${ytDlpPath} ${args.join(" ")}`;
           const result = await execAsync(cmd, {
-            timeout: 20000,
+            timeout: 40000,
             env: process.env
           });
           stdout = result.stdout;
+          if (result.stderr) {
+            console.warn(`[FB Service] yt-dlp stderr (linux-exec): ${result.stderr.substring(0, 500)}`);
+          }
         }
       }
     }
@@ -115,6 +127,8 @@ async function tryYtDlp(url) {
     return null;
   } catch (err) {
     console.error("[FB Service] yt-dlp failed:", err.message);
+    if (err.code !== undefined) console.error(`[FB Service] yt-dlp exit code: ${err.code}`);
+    if (err.stderr) console.error(`[FB Service] yt-dlp stderr: ${String(err.stderr).substring(0, 800)}`);
     return null;
   }
 }
